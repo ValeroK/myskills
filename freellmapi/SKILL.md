@@ -103,6 +103,22 @@ model) rather than relying on `"auto"`.
 
 Request/response shapes for each endpoint are in references/reference.md.
 
+### Enabling tool calling & vision
+
+Both work through Hermes's split of a **main model** (tool-call loop) and
+**auxiliary models** (vision). Enabling them is two-sided:
+
+- **Tool calling:** enable a function-calling model on FreeLLMAPI (e.g. Groq
+  Llama 3.3 70B, Gemini 2.5, Mistral, Qwen), then **pin it as Hermes's main
+  model** — don't use bare `"auto"`, which may route to a tool-incapable model
+  (the proxy guards vision but not tools). Register tools/MCP servers as usual.
+- **Vision:** enable a vision-capable model on FreeLLMAPI (e.g. Gemini 2.5
+  Flash/Pro; otherwise `422 no_vision_model`), then point Hermes's
+  `auxiliary.vision` task at it (own `model` + `base_url`, raised timeout).
+
+Full config with exact YAML keys, verification, and caveats:
+**references/hermes-setup.md**.
+
 ## Behavior Hermes can rely on and observe
 
 - **Automatic failover:** on 429 / 5xx / timeout the router retries the next
