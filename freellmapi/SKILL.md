@@ -1,133 +1,134 @@
 ---
 name: freellmapi
 description: >-
-  FreeLLMAPI is the LLM provider behind ALL of Hermes's model calls — a
-  self-hosted, OpenAI- AND Anthropic-compatible proxy that aggregates the free
-  tiers of ~18 providers behind one /v1 endpoint. Read this whenever you reason
-  about your own capabilities or model choice, override or pin a model, hit rate
-  limits / 429s / provider errors, or need embeddings, vision, tool-calling,
-  streaming, image generation, TTS, or token counting. Covers the endpoints,
-  model selection ("auto" + Claude family aliases), automatic failover, the
-  RPM/RPD/TPM/TPD quotas, the no-frontier-model capability ceiling, response
-  headers you can inspect (X-Routed-Via), and the provider gotchas that change
-  how you should plan work. Full model catalog and per-endpoint request/response
-  shapes live in references/reference.md — load it before making non-obvious calls.
+  Reference for FreeLLMAPI, the self-hosted OpenAI-compatible proxy that serves
+  the Hermes agent's LLM calls by aggregating the free tiers of ~18 providers
+  (Gemini, Groq, Mistral, Cerebras, OpenRouter, Cohere, and more) behind one /v1
+  endpoint. Explains the OpenAI-format endpoints, model selection ("auto" and
+  pinned IDs), automatic cross-provider failover, the RPM/RPD/TPM/TPD rate-limit
+  quotas, the no-frontier-model capability ceiling, inspectable response headers
+  (X-Routed-Via), and provider gotchas. Use when reasoning about which model to
+  use, overriding or pinning a model, handling 429s / rate limits / provider
+  errors, configuring OPENAI_BASE_URL, or using embeddings, vision, tool calling,
+  streaming, image generation, or token counting. Full catalog and per-endpoint
+  request/response shapes are in references/reference.md.
 ---
 
-# FreeLLMAPI — your LLM provider
+# FreeLLMAPI — the LLM provider behind Hermes
 
-Every model call you make is served by **FreeLLMAPI**, a local proxy that fans
-your requests out across the free tiers of ~18 upstream providers (Google
-Gemini, Groq, Mistral, Cerebras, OpenRouter, Cohere, Cloudflare, NVIDIA NIM,
-HuggingFace, Ollama Cloud, and more) behind a single OpenAI/Anthropic-compatible
-`/v1` surface. It handles routing, automatic failover, and quota tracking for
-you. It is **for personal experimentation, not production**, and offers **no
-SLA** — plan accordingly.
+Hermes routes every model call to **FreeLLMAPI**, a local proxy that fans
+requests across the free tiers of ~18 upstream providers (Google Gemini, Groq,
+Mistral, Cerebras, OpenRouter, Cohere, Cloudflare, NVIDIA NIM, HuggingFace,
+Ollama Cloud, and others) behind a single OpenAI-compatible `/v1` surface. It
+handles routing, automatic failover, and quota tracking. It is **for personal
+experimentation, not production**, and carries **no SLA** — plan for that.
 
-## The one thing to internalize: your capability ceiling
+## The capability ceiling — internalize this first
 
-FreeLLMAPI exposes **no frontier models.** The strongest models you can reach are
-roughly **Llama 3.3 70B, GLM-4.5, Qwen 3 Coder, and Gemini 2.5 Pro/Flash** — mid
-tier, not Opus/GPT-class. Calibrate ambition to that:
+FreeLLMAPI exposes **no frontier models**. The strongest reachable models are
+roughly **Llama 3.3 70B, GLM-4.5, Qwen 3 Coder, and Gemini 2.5 Pro/Flash** —
+mid tier, not GPT-4/Opus class. Consequences for how Hermes should work:
 
-- Prefer decomposing hard problems into smaller, verifiable steps over
-  one-shotting a task that needs frontier reasoning.
-- Expect **variable quality and latency** — the model that answers depends on
-  which upstreams are healthy and un-throttled *right now*.
-- **Quality degrades as daily caps fill up:** the router falls back to weaker
-  models later in the day. Do your hardest reasoning early / on fresh quota when
-  you can, and re-verify important results.
+- **Decompose** hard problems into smaller, verifiable steps instead of
+  one-shotting tasks that need frontier reasoning.
+- **Expect variable quality and latency** — which model answers depends on which
+  upstreams are healthy and un-throttled right now.
+- **Quality degrades as daily caps fill.** The router falls back to weaker
+  models later in the day; do the hardest reasoning on fresh quota and re-verify
+  important results.
 
-## How your calls reach it
+## How Hermes connects (OpenAI format)
 
-Two wire formats, same proxy. You (a Claude agent) almost always use the
-**Anthropic** surface:
+Hermes is provider-agnostic and points at any OpenAI-compatible endpoint. Set:
 
-- **Anthropic (Claude) — `POST /v1/messages`:** speaks Anthropic's native format.
-  Configured via env, not code:
-  ```bash
-  export ANTHROPIC_BASE_URL=http://localhost:3001
-  export ANTHROPIC_AUTH_TOKEN=freellmapi-<your-unified-key>   # NOT ANTHROPIC_API_KEY
-  ```
-  ⚠️ Use `ANTHROPIC_AUTH_TOKEN`. Setting `ANTHROPIC_API_KEY` makes Claude Code
-  treat it as a conflicting credential and refuse to start.
-- **OpenAI — `POST /v1/chat/completions`:** for OpenAI SDK / raw HTTP tools.
-  Base URL `http://localhost:3001/v1`, `Authorization: Bearer freellmapi-<key>`.
+```bash
+export OPENAI_BASE_URL=http://localhost:3001/v1
+export OPENAI_API_KEY=freellmapi-<your-unified-key>
+```
 
 The unified key (`freellmapi-…`) replaces every upstream provider credential and
-comes from the dashboard **Keys** page (`http://localhost:3001`).
+comes from the dashboard **Keys** page at `http://localhost:3001`. All calls go
+to `POST /v1/chat/completions` (streaming and non-streaming).
+
+Minimal call:
+
+```bash
+curl http://localhost:3001/v1/chat/completions \
+  -H "Authorization: Bearer freellmapi-<key>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "auto", "messages": [{"role": "user", "content": "hi"}]}'
+```
+
+> Non-OpenAI clients: an Anthropic-format surface (`POST /v1/messages`) also
+> exists — see references/reference.md. Hermes should use the OpenAI path above.
 
 ## Choosing a model
 
 Set the `model` field to one of:
 
-- **`"auto"`** *(default, recommended)* — router picks the highest-priority
-  healthy model that's under its rate limits. Let it drive unless you have a
-  reason not to.
-- **A specific ID** — e.g. `"gemini-2.5-flash"`, `"llama-3.3-70b-versatile"`.
-  Pin only when a task needs a specific model's strengths (e.g. a coder model).
-- **Claude family aliases** *(on `/v1/messages` only)* — `"claude-opus"`,
-  `"claude-sonnet-4-5"`, `"claude-haiku"`, `"claude-default"`. These map to
-  *pinned upstream models* on the dashboard's Keys → Anthropic tab — they are
-  **not** real Anthropic models, just routing labels.
+- **`"auto"`** *(default — recommended)*: the router picks the highest-priority
+  healthy model that is under its rate limits. Let it drive unless a task needs a
+  specific model's strengths.
+- **A specific ID** — e.g. `"gemini-2.5-flash"`, `"llama-3.3-70b-versatile"`,
+  `"qwen-3-coder"`. Pin only for a concrete reason (e.g. a coding-tuned model for
+  code, a fast model for cheap high-volume work).
 
-Full catalog (161 models across 18 providers): `references/reference.md`.
+Never assume a model is installed — the free-tier catalog lags. Confirm with
+`GET /v1/models` before pinning. Full catalog: references/reference.md.
 
 ## What's supported
 
 | Capability | Endpoint | Notes |
 |---|---|---|
-| Chat / conversation | `/v1/chat/completions`, `/v1/messages` | streaming + non-streaming |
-| Streaming | both chat endpoints | `"stream": true` → SSE deltas |
-| Tool / function calling | `/v1/chat/completions` | OpenAI `tools`/`tool_choice`, multi-step |
-| Vision (image input) | chat endpoints | `image_url` blocks; 422 if no vision model enabled |
+| Chat / conversation | `/v1/chat/completions` | streaming + non-streaming |
+| Streaming | `/v1/chat/completions` | `"stream": true` → SSE deltas |
+| Tool / function calling | `/v1/chat/completions` | OpenAI `tools`/`tool_choice`, multi-step loops |
+| Vision (image input) | `/v1/chat/completions` | `image_url` blocks; 422 if no vision model enabled |
 | Embeddings | `/v1/embeddings` | **failover never crosses model families** |
-| Token counting | `/v1/messages/count_tokens` | Anthropic format |
 | Image generation | `/v1/images/generations` | |
 | Text-to-speech | `/v1/audio/speech` | |
 | Legacy completion | `/v1/completions` | prompt/suffix autocomplete |
-| List models | `GET /v1/models` | Anthropic shape if `anthropic-version` header sent, else OpenAI |
+| List models | `GET /v1/models` | source of truth for what's actually available |
 
-## Behavior you can rely on and observe
+Request/response shapes for each are in references/reference.md.
+
+## Behavior Hermes can rely on and observe
 
 - **Automatic failover:** on 429 / 5xx / timeout the router retries the next
   provider in the fallback chain — **up to 20 attempts** — before erroring. A
-  single 429 from an upstream usually costs you latency, not a failure.
-- **Inspect what actually served you** via response headers:
+  single upstream 429 usually costs latency, not a failure.
+- **Inspect what actually served the request** via response headers:
   - `X-Routed-Via: <platform>/<model>` — the real provider+model that answered.
   - `X-Fallback-Attempts: N` — how many providers were tried.
-  Log/surface these when debugging quality or latency — the answering model may
-  not be the one you asked for.
+  When debugging quality or latency, read these — the answering model may not be
+  the one requested (especially under `"auto"`).
 - **Sticky sessions:** send `X-Session-Id: <id>` to pin a multi-turn
   conversation to one model for 30 minutes and avoid mid-thread model swaps.
 
 ## Handling failures
 
-- **Persistent 429 / all attempts exhausted:** daily/minute quotas across
-  upstreams are drained. Back off, narrow scope, or switch to a lighter model —
-  don't hammer it. Quotas reset (RPD/TPD daily).
-- **`422 no_vision_model`:** you sent an image but no vision-capable upstream is
-  enabled. Drop the image or ask the user to enable a vision model in the
-  dashboard.
+- **Persistent 429 / all attempts exhausted:** per-minute and per-day quotas
+  across upstreams are drained. Back off, narrow scope, or switch to a lighter
+  model — do not hammer it. RPD/TPD reset daily.
+- **`422 no_vision_model`:** an image was sent but no vision-capable upstream is
+  enabled. Drop the image or enable a vision model in the dashboard.
 - **Embeddings:** the router only retries *within the same embedding family*
-  (vectors from different models are incompatible). Don't mix embedding models
-  in one index. Default family is `gemini-embedding-001` (3072 dims).
-- **Quota tracking:** the proxy meters **RPM, RPD, TPM, TPD** per key and marks
-  keys `healthy` / `rate_limited` / `invalid` / `error`. Health is visible on
-  the dashboard.
+  (vectors from different models are incompatible). Don't mix embedding models in
+  one index. Default family is `gemini-embedding-001` (3072 dims).
+- **Quotas metered per key:** RPM, RPD, TPM, TPD; keys show as `healthy`,
+  `rate_limited`, `invalid`, or `error` on the dashboard.
 
 ## Gotchas checklist
 
-- `ANTHROPIC_AUTH_TOKEN`, never `ANTHROPIC_API_KEY`.
-- Claude alias names are routing labels, not real Anthropic models — no frontier
-  capability behind them.
-- Free-tier catalog lags Premium by ~30 days; a model you read about may not be
-  installed yet — trust `GET /v1/models`, not documentation.
-- No SLA, no guarantees; upstream free tiers can change or vanish without notice.
-- Some upstreams (Google Gemini, GitHub Models, NVIDIA NIM) carry
-  business-use/evaluation-only ToS caveats — keep usage to personal
-  experimentation.
+- Point `OPENAI_BASE_URL` at `.../v1`; the key is `freellmapi-…`, not an upstream
+  provider key.
+- No frontier models — calibrate ambition and verify important outputs.
+- The catalog lags Premium by ~30 days; a documented model may not be installed —
+  trust `GET /v1/models`, not docs.
+- No SLA; upstream free tiers can change or vanish without notice.
+- Some upstreams (Google Gemini, GitHub Models, NVIDIA NIM) carry business-use /
+  evaluation-only ToS caveats — keep usage to personal experimentation.
 
-For exhaustive per-provider model lists, rate-limit specifics, full
-request/response examples for every endpoint, and environment variables, read
-**`references/reference.md`**.
+For the exhaustive per-provider model catalog, full request/response examples for
+every endpoint, headers, rate-limit detail, and environment variables, read
+**references/reference.md**.

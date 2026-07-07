@@ -1,12 +1,26 @@
 # FreeLLMAPI — full reference
 
 Load this when SKILL.md isn't enough: exhaustive provider/model catalog,
-per-endpoint request/response shapes, rate-limit detail, environment variables,
-and ToS notes. Source: <https://github.com/tashfeenahmed/freellmapi> and
-<https://freellmapi.co/models.html>.
+per-endpoint request/response shapes, headers, rate-limit detail, environment
+variables, and ToS notes. Source: <https://github.com/tashfeenahmed/freellmapi>
+and <https://freellmapi.co/models.html>.
 
-> Numbers below (161 models, 18 providers, ~1.7B tokens/month) are the project's
-> own claims for a fully-configured install. Your actual reachable set = whatever
+## Contents
+
+- Endpoints
+- Authentication
+- Providers & models (catalog)
+- Model selection values
+- OpenAI-format examples (chat, tools, vision, embeddings)
+- Anthropic-format surface (secondary — Hermes uses OpenAI)
+- Headers
+- Rate limiting & failover
+- Environment variables
+- Install / run
+- Limitations & ToS notes
+
+> Counts below (161 models, 18 providers, ~1.7B tokens/month) are the project's
+> claims for a fully-configured install. Hermes's actual reachable set = whatever
 > upstream keys are enabled and healthy. **Always trust `GET /v1/models` over
 > this document.**
 
@@ -16,25 +30,27 @@ and ToS notes. Source: <https://github.com/tashfeenahmed/freellmapi> and
 
 | Method + path | Purpose |
 |---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible chat, streaming + non-streaming |
-| `POST /v1/messages` | Anthropic Messages API (Claude-compatible) |
-| `POST /v1/messages/count_tokens` | Token counting, Anthropic format |
-| `POST /v1/completions` | Legacy prompt/suffix (editor autocomplete) |
-| `POST /v1/responses` | Codex CLI wire format with tool calls |
+| `POST /v1/chat/completions` | OpenAI-compatible chat — **Hermes's primary endpoint** |
 | `POST /v1/embeddings` | Vector embeddings, family-based routing |
 | `POST /v1/images/generations` | Image generation |
 | `POST /v1/audio/speech` | Text-to-speech |
+| `POST /v1/completions` | Legacy prompt/suffix (editor autocomplete) |
 | `GET  /v1/models` | List available models (content-negotiated shape) |
+| `POST /v1/messages` | Anthropic Messages API (for non-OpenAI clients) |
+| `POST /v1/messages/count_tokens` | Token counting, Anthropic format |
+| `POST /v1/responses` | Codex CLI wire format with tool calls |
 
 ---
 
 ## Authentication
 
 - **Unified Bearer (primary):** `Authorization: Bearer freellmapi-<key>`
-- **Anthropic header (for `/v1/messages`):** `x-api-key: freellmapi-<key>` or the
-  Bearer token.
+  (OpenAI SDK: set `OPENAI_API_KEY=freellmapi-<key>` and
+  `OPENAI_BASE_URL=http://localhost:3001/v1`).
+- **Anthropic header (for `/v1/messages` only):** `x-api-key: freellmapi-<key>`
+  or the Bearer token.
 
-The unified key is generated at setup, stored on the dashboard **Keys** page
+The unified key is generated at setup, lives on the dashboard **Keys** page
 header, and replaces all upstream provider credentials.
 
 ---
@@ -66,16 +82,17 @@ Browse the live catalog: <https://freellmapi.co/models.html>.
 
 ### Model selection values
 - `"auto"` — router picks highest-priority healthy model under rate limits.
-- Specific IDs — e.g. `"gemini-2.5-flash"`, `"llama-3.3-70b-versatile"`.
+- Specific IDs — e.g. `"gemini-2.5-flash"`, `"llama-3.3-70b-versatile"`,
+  `"qwen-3-coder"`.
 - Claude family aliases (`/v1/messages` only): `"claude-opus"`,
   `"claude-sonnet-4-5"`, `"claude-haiku"`, `"claude-default"` — routing labels
   mapped to pinned upstreams on Keys → Anthropic, **not** real Anthropic models.
 
 ---
 
-## Request/response examples
+## OpenAI-format examples
 
-### OpenAI chat (Python)
+### Chat (Python, OpenAI SDK) — Hermes's path
 ```python
 from openai import OpenAI
 
@@ -91,7 +108,7 @@ print(resp.choices[0].message.content)
 print("Routed via:", resp.headers.get("x-routed-via"))
 ```
 
-### OpenAI chat (curl)
+### Chat (curl)
 ```bash
 curl http://localhost:3001/v1/chat/completions \
   -H "Authorization: Bearer freellmapi-your-unified-key" \
@@ -99,15 +116,7 @@ curl http://localhost:3001/v1/chat/completions \
   -d '{"model": "auto", "messages": [{"role": "user", "content": "hi"}]}'
 ```
 
-### Anthropic / Claude Code
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:3001
-export ANTHROPIC_AUTH_TOKEN=freellmapi-your-unified-key   # NOT ANTHROPIC_API_KEY
-claude
-```
-Official Anthropic SDKs and Claude Code work unchanged against `/v1/messages`.
-
-### Tool / function calling (OpenAI style)
+### Tool / function calling
 ```json
 {
   "model": "auto",
@@ -123,7 +132,7 @@ Official Anthropic SDKs and Claude Code work unchanged against `/v1/messages`.
   "tool_choice": "required"
 }
 ```
-Response contains a `tool_calls` array; reply with
+The response contains a `tool_calls` array; reply with
 `{"role": "tool", "tool_call_id": "...", "content": "..."}` to continue.
 Multi-step tool loops work across all provider ecosystems.
 
@@ -137,8 +146,8 @@ Multi-step tool loops work across all provider ecosystems.
   ]
 }
 ```
-Router restricts to vision-capable models; returns `422` with
-`code: "no_vision_model"` if none are enabled. Streaming with images supported.
+The router restricts to vision-capable models and returns `422` with
+`code: "no_vision_model"` if none are enabled. Streaming with images is supported.
 
 ### Embeddings
 ```bash
@@ -150,6 +159,22 @@ curl http://localhost:3001/v1/embeddings \
 **Failover never crosses families** (incompatible vectors). Families include
 `gemini-embedding-001` (default, 3072 dims), `text-embedding-3-large`,
 `bge-m3` (1024), and others. Default set on dashboard **Models → Embeddings**.
+
+---
+
+## Anthropic-format surface (secondary)
+
+Hermes uses the OpenAI path above. This section is for Anthropic-format clients
+(e.g. Claude Code, Anthropic SDKs) pointed at the same proxy:
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:3001
+export ANTHROPIC_AUTH_TOKEN=freellmapi-your-unified-key   # NOT ANTHROPIC_API_KEY
+```
+`/v1/messages` speaks Anthropic's native format. ⚠️ Use `ANTHROPIC_AUTH_TOKEN`;
+setting `ANTHROPIC_API_KEY` makes such clients treat it as a conflicting
+credential and refuse to start. `GET /v1/models` returns Anthropic shape when the
+client sends an `anthropic-version` header, OpenAI shape otherwise.
 
 ---
 
