@@ -76,21 +76,32 @@ Set the `model` field to one of:
 Never assume a model is installed — the free-tier catalog lags. Confirm with
 `GET /v1/models` before pinning. Full catalog: references/reference.md.
 
-## What's supported
+## What's supported — and what Hermes actually uses
 
-| Capability | Endpoint | Notes |
-|---|---|---|
-| Chat / conversation | `/v1/chat/completions` | streaming + non-streaming |
-| Streaming | `/v1/chat/completions` | `"stream": true` → SSE deltas |
-| Tool / function calling | `/v1/chat/completions` | OpenAI `tools`/`tool_choice`, multi-step loops |
-| Vision (image input) | `/v1/chat/completions` | `image_url` blocks; 422 if no vision model enabled |
-| Embeddings | `/v1/embeddings` | **failover never crosses model families** |
-| Image generation | `/v1/images/generations` | |
-| Text-to-speech | `/v1/audio/speech` | |
-| Legacy completion | `/v1/completions` | prompt/suffix autocomplete |
-| List models | `GET /v1/models` | source of truth for what's actually available |
+FreeLLMAPI exposes the full capability set below. Hermes is a text/chat agent, so
+it only uses a subset in its normal loop — the **Hermes** column says which:
 
-Request/response shapes for each are in references/reference.md.
+| Capability | Endpoint | Hermes | Notes |
+|---|---|---|---|
+| Chat / conversation | `/v1/chat/completions` | **Core** | the main loop |
+| Streaming | `/v1/chat/completions` | **Core** | `"stream": true` → SSE deltas |
+| Tool / function calling | `/v1/chat/completions` | **Core** | OpenAI `tools`/`tool_choice`; **model-dependent** (see below) |
+| List models | `GET /v1/models` | **Core** | source of truth for what's installed |
+| Vision (image input) | `/v1/chat/completions` | Optional | only if Hermes sends images; `422 no_vision_model` if none enabled |
+| Embeddings | `/v1/embeddings` | Optional | only if Hermes's memory/RAG points here; **failover never crosses families** |
+| Image generation | `/v1/images/generations` | Tool only | standard OpenAI shape; usable only if wired as a Hermes tool |
+| Text-to-speech | `/v1/audio/speech` | Tool only | standard OpenAI shape; usable only if wired as a Hermes tool |
+| Legacy completion | `/v1/completions` | Not used | editor autocomplete |
+| Anthropic messages / `count_tokens` | `/v1/messages*` | Not used | Anthropic-format; Hermes is OpenAI (usage comes back in the response `usage` field) |
+| Codex responses | `/v1/responses` | Not used | Codex CLI wire format |
+
+**Model-dependent caveat:** under `"auto"`, tool calling and vision work only if
+the *routed upstream model* supports them. The proxy guards vision (returns 422
+if no vision model is enabled) but does **not** guard tools — so for reliable
+tool use, **pin a tool-capable model** (e.g. a Llama/Qwen/Gemini function-calling
+model) rather than relying on `"auto"`.
+
+Request/response shapes for each endpoint are in references/reference.md.
 
 ## Behavior Hermes can rely on and observe
 
