@@ -12,6 +12,11 @@ description: >-
   errors, configuring OPENAI_BASE_URL, or using embeddings, vision, tool calling,
   streaming, image generation, or token counting. Full catalog and per-endpoint
   request/response shapes are in references/reference.md.
+version: 1.0.0
+metadata:
+  hermes:
+    category: llm-providers
+    tags: [freellmapi, llm, provider, openai, routing, rate-limits, tool-calling, vision, embeddings]
 ---
 
 # FreeLLMAPI — the LLM provider behind Hermes
