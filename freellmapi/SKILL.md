@@ -4,15 +4,16 @@ description: >-
   Reference for FreeLLMAPI, the self-hosted OpenAI-compatible proxy that serves
   the Hermes agent's LLM calls by aggregating the free tiers of ~18 providers
   (Gemini, Groq, Mistral, Cerebras, OpenRouter, Cohere, and more) behind one /v1
-  endpoint. Explains the OpenAI-format endpoints, model selection ("auto" and
-  pinned IDs), automatic cross-provider failover, the RPM/RPD/TPM/TPD rate-limit
-  quotas, the no-frontier-model capability ceiling, inspectable response headers
-  (X-Routed-Via), and provider gotchas. Use when reasoning about which model to
-  use, overriding or pinning a model, handling 429s / rate limits / provider
+  endpoint. Explains the OpenAI-format endpoints, model selection ("auto", the
+  "fusion" ensemble, and pinned IDs), automatic cross-provider failover, the
+  RPM/RPD/TPM/TPD rate-limit quotas, the no-frontier-model capability ceiling,
+  inspectable response headers (X-Routed-Via), and provider gotchas. Use when
+  reasoning about which model to use, overriding or pinning a model, using
+  "fusion" for accuracy-critical work, handling 429s / rate limits / provider
   errors, configuring OPENAI_BASE_URL, or using embeddings, vision, tool calling,
   streaming, image generation, or token counting. Full catalog and per-endpoint
   request/response shapes are in references/reference.md.
-version: 1.0.0
+version: 1.1.0
 metadata:
   hermes:
     category: llm-providers
@@ -74,9 +75,16 @@ Set the `model` field to one of:
 - **`"auto"`** *(default — recommended)*: the router picks the highest-priority
   healthy model that is under its rate limits. Let it drive unless a task needs a
   specific model's strengths.
-- **A specific ID** — e.g. `"gemini-2.5-flash"`, `"llama-3.3-70b-versatile"`,
-  `"qwen-3-coder"`. Pin only for a concrete reason (e.g. a coding-tuned model for
-  code, a fast model for cheap high-volume work).
+- **`"fusion"`** *(accuracy-critical work)*: a panel of models answers in
+  parallel and a judge synthesizes one answer. The ensemble/consensus reduces
+  hallucinations, at the cost of latency and more quota per call. Reach for it on
+  high-stakes factual, research, or decision tasks — not routine turns.
+- **A specific ID** — pin only for a concrete reason. Rough task→model guide
+  within the current catalog (verify IDs first):
+  - Coding → `"qwen/qwen3-coder:free"`
+  - Hard reasoning / long context → `"nvidia/nemotron-3-super-120b-a12b"`
+  - Fast / cheap high-volume → `"llama-3.3-70b-versatile"` or
+    `"qwen/qwen3-next-80b-a3b-instruct:free"`
 
 Never assume a model is installed — the free-tier catalog lags. Confirm with
 `GET /v1/models` before pinning. Full catalog: references/reference.md.
@@ -163,4 +171,5 @@ Full config with exact YAML keys, verification, and caveats:
 
 For the exhaustive per-provider model catalog, full request/response examples for
 every endpoint, headers, rate-limit detail, and environment variables, read
-**references/reference.md**.
+**references/reference.md**. For enabling tool calling and vision on Hermes (the
+exact YAML config), read **references/hermes-setup.md**.

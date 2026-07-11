@@ -3,19 +3,42 @@
 Personal [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
 for my agents (the [Hermes agent](https://github.com/nousresearch/hermes-agent), etc.).
 
-Each top-level directory is a self-contained skill: a `SKILL.md` with YAML
-frontmatter (`name` + a trigger `description`, plus Hermes's `version` /
-`metadata.hermes` fields) and optional `references/` files that are loaded on
-demand (progressive disclosure). The layout works with **both** the Hermes agent
-and Anthropic Agent Skills / Claude Code. Skills follow Anthropic's authoring
-guidance: concise body (<500 lines), third-person description with specific
-trigger terms, and reference files kept one level deep.
+Each skill is a directory with a `SKILL.md` — YAML frontmatter (`name` + a
+trigger `description`, plus Hermes's `version` / `metadata.hermes` fields) and
+optional `references/` files loaded on demand (progressive disclosure).
+Standalone skills sit at the repo root (`freellmapi/`, `web-retrieval-choice/`);
+related skills are grouped under a **family folder** (`onebrain/`) — the folder
+is organizational only, each subdirectory is still a separate, independently
+triggerable skill. The layout works with **both** the Hermes agent and Anthropic
+Agent Skills / Claude Code. Skills follow Anthropic's authoring guidance: concise
+body (<500 lines), third-person description with specific trigger terms, and
+reference files kept one level deep.
 
 ## Skills
 
 | Skill | What it does |
 |---|---|
-| [`freellmapi/`](./freellmapi/SKILL.md) | Teaches Hermes about **FreeLLMAPI**, the self-hosted OpenAI-compatible proxy that serves all of its LLM calls — how to connect (`OPENAI_BASE_URL`), model selection, cross-provider failover, rate-limit quotas, the no-frontier-model capability ceiling, and provider gotchas. |
+| [`freellmapi/`](./freellmapi/SKILL.md) | Teaches Hermes about **FreeLLMAPI**, the self-hosted OpenAI-compatible proxy that serves all of its LLM calls — how to connect (`OPENAI_BASE_URL`), model selection (`auto`/`fusion`/pinned), cross-provider failover, rate-limit quotas, the no-frontier-model capability ceiling, and provider gotchas. |
+| [`web-retrieval-choice/`](./web-retrieval-choice/SKILL.md) | Decides **which web-retrieval tool** to use in Hermes — scrapper-tool (structured / bot-hostile scraping), Firecrawl (`web_search`/`web_extract`), or Perplexity (`pplx_*` cited answers / deep research) — with the Perplexity intent/quota tiers, pre-flight key/health checks, and combined discover→extract workflows. Merged from the former `firecrawl-perplexity-scrapper-choice` + `firecrawl_vs_perplexity` skills. |
+| [`onebrain/obsidian/`](./onebrain/obsidian/SKILL.md) | Filesystem-first Obsidian vault work (read/search/create/edit + quick capture), extended with the **OneBrain** PARA layout and four-tier memory model. Heavy conventions live in [`onebrain/obsidian/references/onebrain-conventions.md`](./onebrain/obsidian/references/onebrain-conventions.md), loaded on demand. |
+| [`onebrain/consolidate/`](./onebrain/consolidate/SKILL.md) | Process the OneBrain `00-inbox` into permanent PARA notes with frontmatter + `[[wikilinks]]`, then clear the inbox. |
+| [`onebrain/distill/`](./onebrain/distill/SKILL.md) | Synthesize a topic scattered across notes into one `03-knowledge` digest with confidence frontmatter and source links. |
+| [`onebrain/daily/`](./onebrain/daily/SKILL.md) | Daily briefing — tasks due/overdue plus context from the last session log. |
+| [`onebrain/wrapup/`](./onebrain/wrapup/SKILL.md) | Write an end-of-session summary note to the `07-logs/session` tree. |
+
+### OneBrain skill set (`onebrain/`)
+
+`obsidian`, `consolidate`, `distill`, `daily`, and `wrapup` together port the
+[OneBrain](https://github.com/…/onebrain) personal-knowledge workflow onto Hermes's native
+skills system. They all target a **OneBrain vault** (PARA folders `00-inbox` … `07-logs`),
+and are grouped under `onebrain/` in this repo. They remain five separate skills (five
+`/slash` commands); the folder just signals the family.
+
+The companion vault charter, [`onebrain/onebrain-vault-charter.md`](./onebrain/onebrain-vault-charter.md), is a
+project context file — **copy it to your vault root as `.hermes.md`** so Hermes always knows
+the vault's structure, conventions, and memory-tier mapping. It is intentionally small
+(always-on), while the full conventions load on demand from the `obsidian` skill's
+`references/`.
 
 ## Installing in the Hermes agent
 
@@ -25,6 +48,11 @@ under `skills.external_dirs` in the Hermes config. Each skill is a folder
 `category/skill-name/` containing a `SKILL.md` (+ optional `references/`,
 `scripts/`, `templates/`, `assets/`), and every installed skill is exposed as a
 slash command. This repo's `freellmapi/` skill already matches that layout.
+
+The `onebrain/` family folder is a **repo-organization layer only** — it is not a
+Hermes category. Deploy each of its subfolders into the target Hermes category
+(these five ship under `note-taking/`), e.g. `cp -r onebrain/obsidian
+~/.hermes/skills/note-taking/`.
 
 Pick one of the two methods:
 
