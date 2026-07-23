@@ -6,7 +6,7 @@ for my agents (the [Hermes agent](https://github.com/nousresearch/hermes-agent),
 Each skill is a directory with a `SKILL.md` — YAML frontmatter (`name` + a
 trigger `description`, plus Hermes's `version` / `metadata.hermes` fields) and
 optional `references/` files loaded on demand (progressive disclosure).
-Standalone skills sit at the repo root (`freellmapi/`, `web-retrieval-choice/`);
+Standalone skills sit at the repo root (`freellmapi/`, `omniroute/`, `web-retrieval-choice/`);
 related skills are grouped under a **family folder** (`onebrain/`) — the folder
 is organizational only, each subdirectory is still a separate, independently
 triggerable skill. The layout works with **both** the Hermes agent and Anthropic
@@ -19,6 +19,7 @@ reference files kept one level deep.
 | Skill | What it does |
 |---|---|
 | [`freellmapi/`](./freellmapi/SKILL.md) | Teaches Hermes about **FreeLLMAPI**, the self-hosted OpenAI-compatible proxy that serves all of its LLM calls — how to connect (`OPENAI_BASE_URL`), model selection (`auto`/`fusion`/pinned), cross-provider failover, rate-limit quotas, the no-frontier-model capability ceiling, and provider gotchas. |
+| [`omniroute/`](./omniroute/SKILL.md) | Teaches Hermes about **OmniRoute**, a self-hosted OpenAI-compatible LLM gateway (`http://127.0.0.1:20128/v1`, interchangeable with FreeLLMAPI) — how to point Hermes at it, the `auto/*` routing combos vs. pinning a concrete model, inspecting which model served a request, and MCP/A2A + health checks. Secure Docker install lives in [`references/install.md`](./omniroute/references/install.md), loaded on demand. |
 | [`web-retrieval-choice/`](./web-retrieval-choice/SKILL.md) | Decides **which web-retrieval tool** to use in Hermes — scrapper-tool (structured / bot-hostile scraping), Firecrawl (`web_search`/`web_extract`), or Perplexity (`pplx_*` cited answers / deep research) — with the Perplexity intent/quota tiers, pre-flight key/health checks, and combined discover→extract workflows. Merged from the former `firecrawl-perplexity-scrapper-choice` + `firecrawl_vs_perplexity` skills. |
 | [`onebrain/obsidian/`](./onebrain/obsidian/SKILL.md) | Filesystem-first Obsidian vault work (read/search/create/edit + quick capture), extended with the **OneBrain** PARA layout and four-tier memory model. Heavy conventions live in [`onebrain/obsidian/references/onebrain-conventions.md`](./onebrain/obsidian/references/onebrain-conventions.md), loaded on demand. |
 | [`onebrain/consolidate/`](./onebrain/consolidate/SKILL.md) | Process the OneBrain `00-inbox` into permanent PARA notes with frontmatter + `[[wikilinks]]`, then clear the inbox. |
