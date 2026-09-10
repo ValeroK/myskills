@@ -6,7 +6,7 @@ for my agents (the [Hermes agent](https://github.com/nousresearch/hermes-agent),
 Each skill is a directory with a `SKILL.md` — YAML frontmatter (`name` + a
 trigger `description`, plus Hermes's `version` / `metadata.hermes` fields) and
 optional `references/` files loaded on demand (progressive disclosure).
-Standalone skills sit at the repo root (`freellmapi/`, `omniroute/`, `web-retrieval-choice/`);
+Standalone skills sit at the repo root (`freellmapi/`, `omniroute/`, `skill-doctor/`, `web-retrieval-choice/`);
 related skills are grouped under a **family folder** (`onebrain/`) — the folder
 is organizational only, each subdirectory is still a separate, independently
 triggerable skill. The layout works with **both** the Hermes agent and Anthropic
@@ -26,6 +26,23 @@ reference files kept one level deep.
 | [`onebrain/distill/`](./onebrain/distill/SKILL.md) | Synthesize a topic scattered across notes into one `03-knowledge` digest with confidence frontmatter and source links. |
 | [`onebrain/daily/`](./onebrain/daily/SKILL.md) | Daily briefing — tasks due/overdue plus context from the last session log. |
 | [`onebrain/wrapup/`](./onebrain/wrapup/SKILL.md) | Write an end-of-session summary note to the `07-logs/session` tree. |
+| [`skill-doctor/`](./skill-doctor/SKILL.md) | Grades the agent setup from **real local conversation history** (Claude Code / Codex / Warp) against efficiency + code-quality rubrics, then drafts concrete `SKILL.md` edits and renders one self-contained `report.html`. Vendored from [warpdotdev/common-skills](https://github.com/warpdotdev/common-skills/tree/main/.agents/skills/skill-doctor) (MIT). How it differs from Anthropic's `skill-creator` / `claude plugin eval`: [`skill-doctor/COMPARISON.md`](./skill-doctor/COMPARISON.md). |
+
+### Running `skill-doctor` on this repo
+
+`skill-doctor` discovers skills from `.agents/skills`, `.claude/skills`, and
+`.codex/skills`. This repo keeps skills at the root instead, so point the
+collector at them explicitly:
+
+```bash
+python3 skill-doctor/scripts/collect_sessions.py --out "$REPORT_DIR" \
+  --repo . --skills-dir . --skills-dir ./onebrain --include-global-skills
+```
+
+Two things to know: its inventory parser reads a single-line `description:`, so
+the folded (`>-`) descriptions used by most skills here show up empty in
+`inventory.json` (cosmetic — scoring is unaffected), and the rendered report
+carries Warp's "Request access to Warp Factories" call to action.
 
 ### OneBrain skill set (`onebrain/`)
 
